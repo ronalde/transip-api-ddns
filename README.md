@@ -1,17 +1,21 @@
 # transip-api-ddns
 
-A bash script that generates PHP code which updates DNS records using
-the TransIP API.
+A bash script that generates and runs PHP code which updates DNS
+records using the TransIP API.
+
 
 ## Rationale
 
 When your ISP doesn't assign you a static IP address, but you would
-like to publish servers and/or services in your local network anyhow
-and you can't or don't want to use DDNS services around, this script
-performs the same.
+like to publish servers and/or services in your local network and you
+can't or don't want to use DDNS services around, this script achieves
+the same goal; it checks your remote IP address and updates all the
+DNS records you specified in the script.
 
-It checks your remote IP address and updates all the DNS records you
-specified in the script.
+So another usage scenario is to just use it as an easy and convenient
+way to mamage your TransIP DNS settings from the command line /
+terminal, for any domain you manage.
+
 
 ## Basic usage:
 
