@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 ## this file is sourced by transip-api-update-ddns
 
 CONF_REMOTEIP_URL="http://ipecho.net/plain"
