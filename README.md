@@ -15,9 +15,9 @@ specified in the script.
 
 ## Basic usage:
 
-1. copy `etc/transip-api-update-ddns/settings' to
-    `/etc/transip-api-update-ddns/settings and modify it contents
-2. modify the contents of the `dns_records' variable in the script
+1. copy `etc/transip-api-update-ddns/settings` to
+    `/etc/transip-api-update-ddns/settings` and modify it contents
+2. modify the contents of the `dns_records` variable in the script
 3. test the script by running it run from the terminal
    and repeat 1. and 2. until your satisfied:
 ```bash
