@@ -1,7 +1,7 @@
 # transip-api-ddns
 
 A bash script that generates and runs PHP code which updates DNS
-records using the TransIP API.
+records using the [TransIP API](https://api.transip.nl/docs/transip.nl/package-Transip.html).
 
 
 ## Rationale
