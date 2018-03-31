@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+## return url for tarball of current TransAPI API PHP library, or its
+## filename in case $1 is not empty
+
+query_url="https://www.transip.eu/transip/api/"
+download_url="https://api.transip.eu/downloads"
+url_re="${download_url//./\.}"
+filename_re='transapi_transip\.eu_v[0-9]_[0-9]\.tar\.gz'
+
+curl_out="$(curl -s "${query_url}" | \
+    grep -E "${url_re}/${filename_re}")"
+
+filename="$(echo "${curl_out}" | \
+    sed "s#.*\(${url_re}\)/\(${filename_re}\).*#\2#")"
+
+url="$(echo "${curl_out}" | \
+    sed "s#.*\(${url_re}\)/\(${filename_re}\).*#\1/\2#")"
+
+if [[ "${1}x" == "x" ]]; then
+    printf "%s" "${url}"
+else
+    printf "%s" "${filename}"
+fi
