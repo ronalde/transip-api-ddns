@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-## this file is sourced by transip-api-update-ddns
+## this file is sourced by transip-api-ddns
 
 CONF_REMOTEIP_URL="http://ipecho.net/plain"
-CONF_TRANSIP_API_LIB_DIR="/opt/transip-api-php-lib"
+CONF_SETTINGS_DIR=""
+CONF_TRANSIP_API_LIB_DIR="${CONF_TRANSIP_API_LIB_DIR:-/opt/transip-api-ddns-phplib}"
 CONF_TRANSIP_API_LIB_FILE="lib/Transip/DomainService.php"
 CONF_TRANSIP_API_LIB_PATH="${CONF_TRANSIP_API_LIB_DIR}/${CONF_TRANSIP_API_LIB_FILE}"
 
@@ -19,27 +20,36 @@ CONF_SMTPD_POSTMASTEREMAIL="postmaster@${CONF_DNS_DOMAIN}"
 ## change 'none' to 'quarantine' 'reject' when everything is working 
 CONF_DMARC_POLICY="none"
 
-## TRANSIP Account
+## TransIP username
 CONF_TRANSIP_API_USERNAME="someuser"
-## API Key
-## paste your complete key, including `-----BEGIN PRIVATE KEY-----' and
-## `-----END PRIVATE KEY-----'
-CONF_TRANSIP_API_PRIVATEKEY="
------BEGIN PRIVATE KEY-----
-...
------END PRIVATE KEY-----
-"
+## TransIP API key;
+## either use a separate file
+CONF_TRANSIP_API_PRIVATEKEY_FILE="${APP_CONF_DIR}/transapi-private.key"
+## -or-
+## paste your complete key here
+CONF_TRANSIP_API_PRIVATEKEY=""
 
 
 CONF_MX_HOSTNAME="${CONF_SMTPD_HOSTNAME}"
 CONF_MX_FQDN="${CONF_MX_HOSTNAME}.${CONF_DNS_DOMAIN}"
 CONF_SMTPD_SMARTHOST_FQDN="${CONF_SMTPD_SMARTHOSTNAME}.${CONF_DNS_DOMAIN}"
 CONF_SPF_TXT="\"v=spf1 ip4:${CONF_SMTPD_SMARTHOSTIPADDRESS}/32 a:${CONF_SMTPD_SMARTHOSTFQDN} ~all\""
+
+## DKIM key
+## http://dkim.org/specs/rfc4871-dkimbase.html
+## Either use the file below
+CONF_DKIM_KEY_FILE="${APP_CONF_DIR}/dkim.key"
+## -or-
 ## paste your complete dkim key without spaces and double quotes,
 ## including `p=xyz...
-CONF_DKIM_KEY="p=..."
-CONF_DKIM_TXT="\"v=DKIM1; h=sha256; k=rsa; ${CONF_DKIM_KEY}\""
+CONF_DKIM_KEY=""
+## 'h=' field; acceptable hash algorithms)
+CONF_DKIM_ALGORITHM="sha256"
+## 'k=' field; key type (plain-text; OPTIONAL, default is "rsa")
+CONF_DKIM_TYPE="rsa"
+CONF_DKIM_TXT="\"v=DKIM1; h=${CONF_DKIM_ALGORITHM}; k=${CONF_DKIM_TYPE}; ${CONF_DKIM_KEY}\""
 CONF_DKIM_SUBDOMAIN="${CONF_SMTPD_HOSTNAME}._domainkey"
 CONF_DMARC_POSTMASTEREMAIL="${CONF_SMTPD_POSTMASTEREMAIL}"
 CONF_DMARC_SUBDOMAIN="_dmarc"
 CONF_DMARC_TXT="\"v=DMARC1; p=${CONF_DMARC_POLICY}; rua=mailto:${CONF_SMTPD_POSTMASTEREMAIL}\""
+

@@ -28,29 +28,44 @@
 ## - TransIP API reference:
 ##   https://api.transip.nl/docs/transip.nl/class-Transip_DnsEntry.html
 ##
-## Basic usage:
-## 1. copy `etc/transip-api-update-ddns/settings' to
-##    `/etc/transip-api-update-ddns/settings and modify it contents
-## 2. modify the contents of the dns_records variable
-## 2. test the script by running it run from the terminal
-##    and repeat 1. and 2. until your satisfied:
-##     DEBUG=true bash transip-api-update-ddns
-## 3. copy the script to /etc/cron.hourly:
-##     sudo cp -av transip-api-update-ddns /etc/cron.hourly
-## 4. test the working of the cron job:
+## Installation:
+## 1. run `make build' to download and install the php library, and
+## install the settings and cron script to `./build':
+##  make build
+## 2. copy the settings.example template:
+##  cp -av ./build/etc/transip-api-ddns/settings.example ./build/etc/transip-api-ddns/settings
+## 3. modify the contents of `./build/etc/transip-api-ddns/settings'
+## 4. modify the contents of the `dns_records' variable in
+##    `./build/etc/cron.hourly/transip-api-ddns'
+## 5. test the script and settings from the build directory (repeating
+##    steps 3. and 4. until your satisfied):
+##     cd build/etc/cron.hourly
+##     DEBUG=true bash transip-api-ddns
+## 6. install the php library and modified script and settings file:
+##     sudo make install
+## 7. test the working of the cron job:
 ##     sudo run-parts /etc/cron.hourly -v
 
-APP_NAME="transip-api-update-ddns"
-APP_VERSION="0.0.1"
-APP_LOG_DIR="/var/log/${APP_NAME}"
+APP_NAME="transip-api-ddns"
+APP_VERSION="0.0.2"
+DEBUG="${DEBUG:-}"
 APP_CONF_DIR="/etc/${APP_NAME}"
+APP_LOG_DIR="/var/log/${APP_NAME}"
+APP_DB_DIR="/etc/${APP_NAME}"
+APP_BUILD_DIR="build"
+if [[ ${DEBUG} ]]; then
+    APP_CONF_DIR="${APP_BUILD_DIR}${APP_CONF_DIR}"
+    APP_LOG_DIR="${APP_BUILD_DIR}${APP_LOG_DIR}"
+    APP_DB_DIR="${APP_BUILD_DIR}${APP_DB_DIR}"
+fi
+
 APP_LOG_FILE="${APP_LOG_DIR}/$(date +"%Y-%m-%d")-${APP_NAME}.log"
 APP_CONF_FILE="${APP_CONF_DIR}/settings"
+APP_DB_FILE="${APP_CONF_DIR}/db.dns"
 
 MAX_RIP_RETRIES=3
 RIP_RETRY_TIMEOUT=10
 
-DEBUG="${DEBUG:-}"
 
 function do_log() {
     ## print to stderr or if ${APP_LOG_FILE} is accessible to stdout
@@ -72,17 +87,17 @@ function get_current_rip() {
     counter="${1:-0}"
     ((counter++))
     if (( counter < MAX_RIP_RETRIES )); then
-	current_rip="$(curl "${CONF_REMOTEIP_URL}" 2>/dev/null)"
-	if [[ "${current_rip}x" == "x" ]]; then
+	CURRENT_RIP="$(curl "${CONF_REMOTEIP_URL}" 2>/dev/null)"
+	if [[ "${CURRENT_RIP}x" == "x" ]]; then
 	    sleep "${RIP_RETRY_TIMEOUT}"
 	    ret_current_rip "${counter}"
 	fi
     fi
-    if  [[ "${current_rip}x" == "x" ]]; then
+    if  [[ "${CURRENT_RIP}x" == "x" ]]; then
 	do_log "error" "unable to get current remote ip address using url \`${CONF_REMOTEIP_URL}'." 
 	return 1
     else
-	do_log  "info" "current remote ip address: \`${current_rip}'."
+	do_log  "info" "current remote ip address: \`${CURRENT_RIP}'."
     fi 
 }
 
@@ -111,57 +126,69 @@ function parse_dns_records() {
     do_log "info" "begin parsing records"
     dns_errors=()
     line_counter=0
-    while read -a dns_record; do
-	((line_counter++))
-	record_errors=()
-	nr_fields=${#dns_record[@]}
-	if (( nr_fields  < 3 )) || [[ "${dns_record}" =~ ${remark_re} ]]; then
-	    if [[ "${dns_record}x" == "x" ]]; then
-		printf 1>&2 "skipping line ${line_counter}: empty.\n"
-	    elif [[ "${dns_record}" =~ ${remark_re} ]]; then
-		printf 1>&2 "skipping line ${line_counter}: remark.\n"
-	    else
-		printf 1>&2 "skipping line ${line_counter} (\`${dns_record}'): not a dns record.\n"
-	    fi
-	else
-	    #declare -p dns_record
-	    record_pointer="${dns_record[0]}"
-	    last_index=$(( nr_fields - 1 ))
-	    if [[ "${dns_record[1]^^}" == "IN" ]]; then
-		type_field_nr=2
-	    else
-		type_field_nr=1
-	    fi
-	    record_type="${dns_record[${type_field_nr}]}"
-	    record_value="${dns_record[@]:$(( type_field_nr + 1 )):${last_index}}"
-	    printf 1>&2 "%7s=%-40s;%7s=%-7s;%7s=%s\n" \
-			"pointer" "\`${record_pointer}'" \
-			"type" "\`${record_type}'" \
-			"value" "\`${record_value}'"
-	    case "${record_type}" in
-		"") 
-		    record_errors+=("type is empty") ;;
-		A|AAAA|MX|CNAME|TXT)
-		    # type is ok
-		;;
-		*)
-		    record_errors+=("invalid record type \`${record_type}'; should be one of 'A', 'AAAA', 'CNAME', 'TXT' or 'MX'")
-	    esac
-	    if [[ "${record_pointer}x" == "x" ]]; then
-		record_errors+=("dns pointer is empty")
-	    elif  [[ "${record_value}x" == "x" ]]; then
-		record_errors+=("value for pointer \`${record_pointer}' of type \`${record_type}' is empty")
-	    fi
-	    if (( ${#record_errors[@]} > 0 )); then
-		printf -v msg_err "%s " "${record_errors[@]}"
-		# store error and keep parsing 
-		dns_errors+=("- in line ${line_counter}: \`${dns_record[*]}': ${msg_err}")
-	    else
-		((dns_record_counter++))
-		php_records+=("\$new_dnsrecords[] = new Transip_DnsEntry('${record_pointer}', ${CONF_DNS_TTL}, '${record_type}', '${record_value}');")
-	    fi
+    dns_records=()
+    #declare -p APP_DB_FILE 1>&2
+    rem_re="^#"
+    ## eval each line in APP_DB_FILE, which expands the variables within
+    ## and turn each line in an array containing the dns fields
+    while read -r line; do
+	if [[ ! "${line}" =~ ${rem_re} ]]; then
+	    #declare -p line
+	    t_dns_record="$(eval echo $line)"
+	    while read -a dns_record; do
+		((line_counter++))
+		record_errors=()
+		nr_fields=${#dns_record[@]}
+		if (( nr_fields  < 3 )) || [[ "${dns_record}" =~ ${remark_re} ]]; then
+		    if [[ "${dns_record}x" == "x" ]]; then
+			printf 1>&2 "skipping line ${line_counter}: empty.\n"
+		    elif [[ "${dns_record}" =~ ${remark_re} ]]; then
+			printf 1>&2 "skipping line ${line_counter}: remark.\n"
+		    else
+			printf 1>&2 "skipping line ${line_counter} (\`${dns_record}'): not a dns record.\n"
+		    fi
+		else
+		    #declare -p dns_record
+		    record_pointer="${dns_record[0]}"
+		    last_index=$(( nr_fields - 1 ))
+		    if [[ "${dns_record[1]^^}" == "IN" ]]; then
+			type_field_nr=2
+		    else
+			type_field_nr=1
+		    fi
+		    record_type="${dns_record[${type_field_nr}]}"
+		    record_value="${dns_record[@]:$(( type_field_nr + 1 )):${last_index}}"
+		    printf 1>&2 "%7s=%-40s;%7s=%-7s;%7s=%s\n" \
+				"pointer" "\`${record_pointer}'" \
+				"type" "\`${record_type}'" \
+				"value" "\`${record_value}'"
+		    case "${record_type}" in
+			"") 
+			    record_errors+=("type is empty") ;;
+			A|AAAA|MX|CNAME|TXT)
+			# type is ok
+			;;
+			*)
+			    record_errors+=("invalid record type \`${record_type}'; should be one of 'A', 'AAAA', 'CNAME', 'TXT' or 'MX'")
+		    esac
+		    if [[ "${record_pointer}x" == "x" ]]; then
+			record_errors+=("dns pointer is empty")
+		    elif  [[ "${record_value}x" == "x" ]]; then
+			record_errors+=("value for pointer \`${record_pointer}' of type \`${record_type}' is empty")
+		    fi
+		    if (( ${#record_errors[@]} > 0 )); then
+			printf -v msg_err "%s " "${record_errors[@]}"
+			# store error and keep parsing 
+			dns_errors+=("- in line ${line_counter}: \`${dns_record[*]}': ${msg_err}")
+		    else
+			((dns_record_counter++))
+			php_records+=("\$new_dnsrecords[] = new Transip_DnsEntry('${record_pointer}', ${CONF_DNS_TTL}, '${record_type}', '${record_value}');")
+		    fi
+		fi
+	    done<<< "${t_dns_record}"
 	fi
-    done<<< "${dns_records}"
+    done<"${APP_DB_FILE}"
+    declare -p dns_records 1>&2
     if (( ${#dns_errors[@]} > 0 )); then
 	printf -v msg_err "not updating ${dns_record_counter} valid dns records because ${#dns_errors[@]} entries where found:\n"
 	printf -v err_details "%s\n" "${dns_errors[@]}"
@@ -183,7 +210,7 @@ function save_php() {
 }
 
 ## main 
-current_rip=""
+CURRENT_RIP=""
 dns_record_counter=0
 php_records=()
 a_dns_records=()
@@ -211,30 +238,27 @@ else
 	exit 1
     fi
 fi
+## check if transip api key file is present
+if [[ "${CONF_TRANSIP_API_PRIVATEKEY}x" == "x" ]]; then
+    if [[ ! -f "${CONF_TRANSIP_API_PRIVATEKEY_FILE}" ]]; then
+	do_log "error" "TransIP API private key file not found in \`${CONF_TRANSIP_API_PRIVATEKEY_FILE}'."
+	exit 1
+    else
+	do_log "info" "Using TransIP API private key file \`${CONF_TRANSIP_API_PRIVATEKEY_FILE}'."
+	CONF_TRANSIP_API_PRIVATEKEY="$(<"${CONF_TRANSIP_API_PRIVATEKEY_FILE}")"
+    fi
+else
+    do_log "info" "Using TransIP API private key file defined in \`${APP_CONF_FILE}'."
+fi
 
+if [[ ! -f "${APP_DB_FILE}" ]]; then
+    do_log "error" "DNS db file \`${APP_DB_FILE}' not found."
+    exit 1
+else
+    do_log "info" "Using DNS db file \`${APP_DB_FILE}'."
+fi
 ## get current remote ip address using url configured in settings file
 get_current_rip || exit 1
-
-## define dns records
-## to use static entries from a bind style db file use something like:
-## read -r dns_records < db.mydomain" and remark or remove the
-## variable definition below
-dns_records="
-;;pointer	                IN type   value
-${CONF_DNS_ROOTHOSTNAME}	IN A	  ${current_rip}
-${CONF_MX_HOSTNAME}		IN A	  ${current_rip}
-${CONF_DNS_ROOTHOSTNAME}	IN MX	  10 ${CONF_MX_HOSTNAME}
-${CONF_DNS_ROOTHOSTNAME}	IN TXT	  ${CONF_SPF_TXT}
-${CONF_DKIM_SUBDOMAIN}		IN TXT	  ${CONF_DKIM_TXT}
-${CONF_DMARC_SUBDOMAIN}		IN TXT	  ${CONF_DMARC_TXT}
-${CONF_SMTPD_SMARTHOSTNAME}	IN A	  ${CONF_SMTPD_SMARTHOSTIPADDRESS}
-imap				IN CNAME  ${CONF_SMTPD_HOSTNAME}
-smtp				IN CNAME  ${CONF_SMTPD_HOSTNAME}
-www				IN A	  ${current_rip}
-webmail				IN CNAME  www
-cloud				IN CNAME  www
-subdomain.www			IN A	  ${current_rip}
-"
 
 ## parse the records
 parse_dns_records

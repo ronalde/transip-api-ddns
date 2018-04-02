@@ -16,23 +16,45 @@ So another usage scenario is to just use it as an easy and convenient
 way to mamage your TransIP DNS settings from the command line /
 terminal, for any domain you manage.
 
-
-## Basic usage:
-
-1. copy `etc/transip-api-update-ddns/settings` to
-    `/etc/transip-api-update-ddns/settings` and modify it contents
-2. modify the contents of the `dns_records` variable in the script
-3. test the script by running it run from the terminal
-   and repeat 1. and 2. until your satisfied:
+## Preparation
+1. As root, create a secure settings directory:
+```bash
+mkdir /etc/transip-api-update-ddns
+chmod 0700 /etc/transip-api-update-ddns
+```
+2. Copy the settings template file to the settings directory created above:
+```bash
+cp etc/transip-api-update-ddns/settings /etc/transip-api-update-ddns/settings
+```
+3. Modify the contents of the settings file
+4. Enable the TRansIP API and generate a keypair through the
+   [control panel](https://www.transip.nl/cp/mijn-account/#api)
+5. Copy the key, save it to
+   `/etc/transip-api-update-ddns/transip-api-key` and secure it:
+```bash
+chmod 0600 /etc/transip-api-update-ddns/transip-api-key
+```
+6. Modify the contents of the `dns_records` variable in the script
+7. Test the script and settings by running it in debugging mode from
+   the terminal;
+   repeat 3. and 6. until your satisfied:
 ```bash
 DEBUG=true bash transip-api-update-ddns
 ```
-4. copy the script to `/etc/cron.hourly`:
+
+## Basic usage
+
+1. copy the script to `/etc/cron.hourly`:
 ```bash
 sudo cp -av transip-api-update-ddns /etc/cron.hourly
 ```
-5. test the working of the cron job:
+2. test the working of the cron job:
 ```bash
 sudo run-parts /etc/cron.hourly -v
 ```
 
+## Requirements
+
+* `curl`: to get the current remote address
+* `php` (cli): to communicate with the TransIP API services.
+* a local copy of the TransIP API PHP library
